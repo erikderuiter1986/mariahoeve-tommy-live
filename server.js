@@ -1,32 +1,26 @@
-// Mariahoeve Tommy live sync service
+// Mariahoeve Tommy live sync service + app data opslag
 //
-// Wat dit doet:
-// 1. Haalt elke X minuten de Tommy iCal feed op (dezelfde link die je nu handmatig download)
-// 2. Rekent per accommodatie uit of er vandaag, of een andere gevraagde dag, een
-//    aankomst (A), vertrek (V) of wissel (W) is
-// 3. Levert dat op via een simpel GET eindpunt dat de housekeeping app kan bevragen
-//
-// Dit vervangt alleen het handmatige downloaden en uploaden van het .ics bestand.
-// Voor de arrangementen zoals linnen en handdoeken, of vroege incheck en late uitcheck,
-// is dit bestand niet genoeg, die zitten niet in de iCal feed, zie de eerdere spec
-// voor de volledige Tommy koppeling als dat straks nodig is.
+// Dit doet twee dingen:
+// 1. Haalt elke X minuten de Tommy iCal feed op en levert aankomst, vertrek en
+//    wissel codes per accommodatie, zie de eindpunten /status en /day/:datum.
+// 2. Biedt een simpele gedeelde opslag voor de housekeeping app zelf, zodat de
+//    app werkt ongeacht waar hij geopend wordt, in plaats van afhankelijk te zijn
+//    van opslag die alleen binnen Claude's eigen weergave bestaat.
 
 const express = require("express");
 const cors = require("cors");
 const cron = require("node-cron");
+const fs = require("fs");
+const path = require("path");
 
 const app = express();
 app.use(cors());
+app.use(express.json({ limit: "5mb" }));
 
 // --- Instellingen, via omgevingsvariabelen zodat er geen geheimen in de code staan ---
 
-// De volledige iCal link die je van Tommy hebt gekregen, inclusief de lange sleutel aan het einde
 const ICS_URL = process.env.TOMMY_ICS_URL;
-
-// Een zelf gekozen wachtwoord waarmee de app zich bij dit service moet identificeren
 const ACCESS_KEY = process.env.ACCESS_KEY || "verander-dit-wachtwoord";
-
-// Hoe vaak opnieuw ophalen bij Tommy, standaard elke 15 minuten
 const REFRESH_CRON = process.env.REFRESH_CRON || "*/15 * * * *";
 
 if (!ICS_URL) {
@@ -34,8 +28,6 @@ if (!ICS_URL) {
   process.exit(1);
 }
 
-// Houd deze lijst gelijk aan de accommodatielijst in de housekeeping app zelf.
-// Namen die hier niet in staan (kampeerplaatsen, inactieve accommodaties) worden genegeerd.
 const KNOWN_ACCOMMODATIONS = [
   "Blikveld", "Boszicht", "Commer", "Dome Galaxy", "Dome Terra",
   "Escape", "Flow", "Hubus", "Kwaak", "Neef Herbert & het Kornuitenhuisje", "Nomad",
@@ -44,8 +36,6 @@ const KNOWN_ACCOMMODATIONS = [
 ];
 const KNOWN_LOWER = KNOWN_ACCOMMODATIONS.map(n => n.toLowerCase());
 
-// --- In-memory opslag van de laatst opgehaalde reserveringen ---
-// Geen database nodig, dit past ruim in het geheugen en wordt elke verversing herbouwd.
 let latestEvents = [];
 let lastFetchedAt = null;
 let lastError = null;
@@ -86,7 +76,6 @@ async function refreshFromTommy() {
 }
 
 function computeForDate(dateStr) {
-  // dateStr in de vorm JJJJ-MM-DD, omzetten naar JJJJMMDD zoals in de iCal
   const target = dateStr.replace(/-/g, "");
   const perAccom = {};
   latestEvents.forEach(ev => {
@@ -107,7 +96,6 @@ function computeForDate(dateStr) {
   }).filter(item => item.code);
 }
 
-// --- Simpele beveiliging: vraag om de sleutel als querystring parameter ---
 function checkAccess(req, res, next) {
   if (req.query.key !== ACCESS_KEY) {
     return res.status(401).json({ error: "Ongeldige of ontbrekende sleutel" });
@@ -115,28 +103,73 @@ function checkAccess(req, res, next) {
   next();
 }
 
+// --- Gedeelde opslag voor de housekeeping app, weggeschreven naar een lokaal bestand ---
+// Let op: bij een nieuwe uitrol op Render kan dit bestand weer leeg beginnen, bij een
+// herstart binnen dezelfde uitrol blijft het bewaard. Voor een klein team is dit
+// ruim voldoende, zonder dat er een aparte database nodig is.
+
+const DATA_FILE = path.join(__dirname, "store.json");
+let store = {};
+try {
+  if (fs.existsSync(DATA_FILE)) {
+    store = JSON.parse(fs.readFileSync(DATA_FILE, "utf8"));
+    console.log(`Opslag geladen, ${Object.keys(store).length} sleutels gevonden.`);
+  }
+} catch (err) {
+  console.error("Kon opslagbestand niet lezen, begin leeg:", err.message);
+  store = {};
+}
+
+function persistStore() {
+  try {
+    fs.writeFileSync(DATA_FILE, JSON.stringify(store));
+  } catch (err) {
+    console.error("Kon opslagbestand niet wegschrijven:", err.message);
+  }
+}
+
 // --- Eindpunten ---
 
-// Statuscheck, geen sleutel nodig, handig om te zien of de service leeft
 app.get("/status", (req, res) => {
   res.json({
     ok: true,
     lastFetchedAt,
     lastError,
-    aantalReserveringen: latestEvents.length
+    aantalReserveringen: latestEvents.length,
+    aantalOpgeslagenSleutels: Object.keys(store).length
   });
 });
 
-// De data die de app nodig heeft, bijvoorbeeld /day/2026-08-01?key=jouw-sleutel
 app.get("/day/:date", checkAccess, (req, res) => {
   const items = computeForDate(req.params.date);
   res.json({ date: req.params.date, items });
 });
 
-// Handmatig een verversing afdwingen, bijvoorbeeld na een wijziging in Tommy
 app.post("/refresh", checkAccess, async (req, res) => {
   await refreshFromTommy();
   res.json({ ok: true, lastFetchedAt, lastError });
+});
+
+// Generieke opslag voor de app zelf
+app.get("/data/:key", checkAccess, (req, res) => {
+  const key = req.params.key;
+  if (!(key in store)) {
+    return res.json({ key, value: null });
+  }
+  res.json({ key, value: store[key] });
+});
+
+app.put("/data/:key", checkAccess, (req, res) => {
+  const key = req.params.key;
+  store[key] = req.body ? req.body.value : null;
+  persistStore();
+  res.json({ ok: true, key });
+});
+
+app.delete("/data/:key", checkAccess, (req, res) => {
+  delete store[req.params.key];
+  persistStore();
+  res.json({ ok: true });
 });
 
 const PORT = process.env.PORT || 3000;
@@ -145,3 +178,4 @@ app.listen(PORT, () => {
   refreshFromTommy();
   cron.schedule(REFRESH_CRON, refreshFromTommy);
 });
+
