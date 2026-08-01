@@ -17,6 +17,9 @@ const app = express();
 app.use(cors());
 app.use(express.json({ limit: "5mb" }));
 
+// De housekeeping app zelf, als gewone website, geen bestand meer nodig op elk toestel
+app.use(express.static(path.join(__dirname, "public")));
+
 // --- Instellingen, via omgevingsvariabelen zodat er geen geheimen in de code staan ---
 
 const ICS_URL = process.env.TOMMY_ICS_URL;
