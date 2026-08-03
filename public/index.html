@@ -282,6 +282,17 @@
     font-style:italic;
     margin-top:4px;
   }
+  .note-display{
+    font-size:14px;
+    font-weight:700;
+    color:var(--ink-900);
+    background:var(--stone-100);
+    border-left:4px solid var(--amber-500);
+    border-radius:10px;
+    padding:9px 12px;
+    margin-top:8px;
+    line-height:1.4;
+  }
   .row2{
     display:flex;
     gap:8px;
@@ -621,6 +632,9 @@
       display:none;
     }
     .quick-sync-row{
+      display:none;
+    }
+    #lockToggle{
       display:none;
     }
   }
@@ -1002,7 +1016,7 @@ function renderNoteSection(id, e, showNote){
     `;
   }
   if(e.note){
-    return `<div class="lock-hint">Notitie: ${escapeHtml(e.note)}</div>`;
+    return `<div class="note-display">📝 ${escapeHtml(e.note)}</div>`;
   }
   return "";
 }
