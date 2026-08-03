@@ -699,7 +699,7 @@
       <button class="tab-btn desktop-only-tab" data-tab="accom">Accommodaties</button>
       <button class="tab-btn mobile-only-tab" data-tab="mytasks">Mijn taken</button>
       <button class="tab-btn" data-tab="prognose">Prognose</button>
-      <button class="tab-btn" data-tab="fixed">Vaste taken</button>
+      <button class="tab-btn desktop-only-tab" data-tab="fixed">Vaste taken</button>
       <button class="tab-btn desktop-only-tab" data-tab="team">Team</button>
       <button class="tab-btn desktop-only-tab" data-tab="admin">Admin</button>
     </nav>
@@ -1189,8 +1189,8 @@ function renderPrognoseTab(main){
               <li>
                 <span class="prognose-detail-name">${escapeHtml(it.name)}</span>
                 <span class="badge ${it.codeText.startsWith('Wissel')?'badge-w':it.codeText.startsWith('Vertrek')?'badge-v':'badge-a'}">${it.codeText}</span>
-                <span class="badge status-badge-${it.statusKey}">${it.statusText}</span>
                 <span class="prognose-detail-meta">${escapeHtml(it.assignee)}</span>
+                <span class="badge status-badge-${it.statusKey}">${it.statusText}</span>
               </li>
             `).join("")}
           </ul>
