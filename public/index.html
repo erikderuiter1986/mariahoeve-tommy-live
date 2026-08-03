@@ -994,6 +994,19 @@ function formatChangedAt(iso){
   }catch(e){ return ""; }
 }
 
+function renderNoteSection(id, e, showNote){
+  if(state.managerUnlocked){
+    return `
+      <button class="note-toggle" data-id="${escapeAttr(id)}" data-action="toggle-note">${showNote ? 'Notitie verbergen' : (e.note ? 'Notitie bekijken' : '+ Notitie toevoegen')}</button>
+      ${showNote ? `<input class="note-input" data-id="${escapeAttr(id)}" data-action="note" placeholder="Bijvoorbeeld: vochtige dekens, extra kaars nodig" value="${escapeAttr(e.note||'')}">` : ""}
+    `;
+  }
+  if(e.note){
+    return `<div class="lock-hint">Notitie: ${escapeHtml(e.note)}</div>`;
+  }
+  return "";
+}
+
 function renderItemCard(kind, name){
   const id = kind+":"+name;
   const e = getEntry(id);
@@ -1036,8 +1049,7 @@ function renderItemCard(kind, name){
       ${!state.managerUnlocked ? '<div class="lock-hint">Vergrendeld, tik op het slotje bovenin om toe te wijzen</div>' : ''}
       <div class="status-row">${statusBtns}</div>
       ${changedLine}
-      <button class="note-toggle" data-id="${escapeAttr(id)}" data-action="toggle-note">${showNote ? 'Notitie verbergen' : (e.note ? 'Notitie bekijken' : '+ Notitie toevoegen')}</button>
-      ${showNote ? `<input class="note-input" data-id="${escapeAttr(id)}" data-action="note" placeholder="Bijvoorbeeld: vochtige dekens, extra kaars nodig" value="${escapeAttr(e.note||'')}">` : ""}
+      ${renderNoteSection(id, e, showNote)}
     </div>
   `;
 }
@@ -1103,7 +1115,8 @@ function renderPrognoseTab(main){
   const months = ["jan","feb","mrt","apr","mei","jun","jul","aug","sep","okt","nov","dec"];
   const codeLabel = { W:"Wissel", V:"Vertrek", LU:"Vertrek (late uitcheck)", A:"Aankomst", VI:"Aankomst (vroege incheck)" };
   const statusLabelMap = { todo:"Schoonmaak", klaar:"Klaar", gecheckt:"Gecheckt" };
-  let html = `<div class="sync-intro" style="margin-bottom:14px;">Vooruitblik voor de komende tien dagen: hoeveel accommodaties aankomst, vertrek of wissel hebben. Klik op een dag voor de details.</div>`;
+  let html = '<div class="quick-sync-row"><button id="prognoseLiveSyncBtn" class="quick-sync-btn live-sync-btn">Ververs live</button></div>';
+  html += `<div class="sync-intro" style="margin-bottom:14px;">Vooruitblik voor de komende tien dagen: hoeveel accommodaties aankomst, vertrek of wissel hebben. Klik op een dag voor de details.</div>`;
   for(let i=0;i<10;i++){
     const d = new Date(state.currentDate);
     d.setDate(d.getDate()+i);
@@ -1155,6 +1168,10 @@ function renderPrognoseTab(main){
     }
   }
   main.innerHTML = html;
+  const prognoseLiveSync = document.getElementById('prognoseLiveSyncBtn');
+  if(prognoseLiveSync){
+    prognoseLiveSync.addEventListener('click', fetchLiveDay);
+  }
   document.querySelectorAll('.prognose-row-clickable').forEach(row=>{
     row.addEventListener('click', ()=>{
       const dKey = row.dataset.day;
