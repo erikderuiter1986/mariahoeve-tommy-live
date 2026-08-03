@@ -106,28 +106,58 @@ function checkAccess(req, res, next) {
   next();
 }
 
-// --- Gedeelde opslag voor de housekeeping app, weggeschreven naar een lokaal bestand ---
-// Let op: bij een nieuwe uitrol op Render kan dit bestand weer leeg beginnen, bij een
-// herstart binnen dezelfde uitrol blijft het bewaard. Voor een klein team is dit
-// ruim voldoende, zonder dat er een aparte database nodig is.
+// --- Gedeelde opslag voor de housekeeping app ---
+// Dit gebruikt Upstash, een blijvend gratis opslagdienst, zodat de gegevens een
+// nieuwe uitrol of een herstart van Render overleven. Werkt de koppeling met
+// Upstash om wat voor reden dan ook niet, dan valt dit terug op een lokaal
+// bestand, dat wel gewist kan worden bij een nieuwe uitrol, puur als noodgreep
+// zodat de app blijft werken.
 
-// Als er een Render Disk gekoppeld is, staat DATA_DIR op het mount path van die
-// Disk (bijvoorbeeld /data), en overleeft de opslag een nieuwe uitrol. Zonder Disk
-// valt dit terug op de gewone app map, die wel gewist kan worden bij een nieuwe uitrol.
-const DATA_DIR = process.env.DATA_DIR || __dirname;
-const DATA_FILE = path.join(DATA_DIR, "store.json");
+const UPSTASH_URL = process.env.UPSTASH_REDIS_REST_URL;
+const UPSTASH_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN;
+const UPSTASH_KEY = "mariahoeve-store";
+const DATA_FILE = path.join(__dirname, "store.json");
+
 let store = {};
-try {
-  if (fs.existsSync(DATA_FILE)) {
-    store = JSON.parse(fs.readFileSync(DATA_FILE, "utf8"));
-    console.log(`Opslag geladen, ${Object.keys(store).length} sleutels gevonden.`);
+
+async function loadStore() {
+  if (UPSTASH_URL && UPSTASH_TOKEN) {
+    try {
+      const res = await fetch(`${UPSTASH_URL}/get/${UPSTASH_KEY}`, {
+        headers: { Authorization: `Bearer ${UPSTASH_TOKEN}` }
+      });
+      const data = await res.json();
+      store = data.result ? JSON.parse(data.result) : {};
+      console.log(`Opslag geladen vanuit Upstash, ${Object.keys(store).length} sleutels gevonden.`);
+      return;
+    } catch (err) {
+      console.error("Kon Upstash niet lezen, val terug op lokaal bestand:", err.message);
+    }
   }
-} catch (err) {
-  console.error("Kon opslagbestand niet lezen, begin leeg:", err.message);
-  store = {};
+  try {
+    if (fs.existsSync(DATA_FILE)) {
+      store = JSON.parse(fs.readFileSync(DATA_FILE, "utf8"));
+      console.log(`Opslag geladen vanuit lokaal bestand, ${Object.keys(store).length} sleutels gevonden.`);
+    }
+  } catch (err) {
+    console.error("Kon opslagbestand niet lezen, begin leeg:", err.message);
+    store = {};
+  }
 }
 
-function persistStore() {
+async function persistStore() {
+  if (UPSTASH_URL && UPSTASH_TOKEN) {
+    try {
+      await fetch(`${UPSTASH_URL}/set/${UPSTASH_KEY}`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${UPSTASH_TOKEN}` },
+        body: JSON.stringify(store)
+      });
+      return;
+    } catch (err) {
+      console.error("Kon niet naar Upstash wegschrijven, val terug op lokaal bestand:", err.message);
+    }
+  }
   try {
     fs.writeFileSync(DATA_FILE, JSON.stringify(store));
   } catch (err) {
@@ -166,22 +196,23 @@ app.get("/data/:key", checkAccess, (req, res) => {
   res.json({ key, value: store[key] });
 });
 
-app.put("/data/:key", checkAccess, (req, res) => {
+app.put("/data/:key", checkAccess, async (req, res) => {
   const key = req.params.key;
   store[key] = req.body ? req.body.value : null;
-  persistStore();
+  await persistStore();
   res.json({ ok: true, key });
 });
 
-app.delete("/data/:key", checkAccess, (req, res) => {
+app.delete("/data/:key", checkAccess, async (req, res) => {
   delete store[req.params.key];
-  persistStore();
+  await persistStore();
   res.json({ ok: true });
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
+app.listen(PORT, async () => {
   console.log(`Mariahoeve Tommy live service draait op poort ${PORT}`);
+  await loadStore();
   refreshFromTommy();
   cron.schedule(REFRESH_CRON, refreshFromTommy);
 });
