@@ -624,6 +624,31 @@
   .status-badge-todo{background:var(--coral-500); color:var(--white);}
   .status-badge-klaar{background:var(--leaf-400); color:var(--forest-900);}
   .status-badge-gecheckt{background:var(--leaf-600); color:var(--white);}
+  .badge-fixed{background:var(--lavender-500); color:var(--white);}
+  .dagoverzicht-list{
+    list-style:none;
+    margin:0;
+    padding:0;
+    background:var(--white);
+    border:1px solid var(--line);
+    border-radius:var(--radius);
+    overflow:hidden;
+  }
+  .dagoverzicht-list li{
+    display:flex;
+    align-items:center;
+    gap:8px;
+    flex-wrap:wrap;
+    padding:12px 14px;
+    border-bottom:1px solid var(--line);
+    font-size:13px;
+  }
+  .status-badge-end{
+    margin-left:auto;
+  }
+  .dagoverzicht-list li:last-child{
+    border-bottom:none;
+  }
   .unmatched{
     font-size:12px;
     color:var(--ink-500);
@@ -697,7 +722,9 @@
     <div class="summary-strip" id="summaryStrip"></div>
     <nav class="tabs">
       <button class="tab-btn desktop-only-tab" data-tab="accom">Accommodaties</button>
+      <button class="tab-btn desktop-only-tab" data-tab="dagoverzicht">Dagoverzicht</button>
       <button class="tab-btn mobile-only-tab" data-tab="mytasks">Mijn taken</button>
+      <button class="tab-btn mobile-only-tab" data-tab="teamoverzicht">Team</button>
       <button class="tab-btn" data-tab="prognose">Prognose</button>
       <button class="tab-btn desktop-only-tab" data-tab="fixed">Vaste taken</button>
       <button class="tab-btn desktop-only-tab" data-tab="team">Team</button>
@@ -989,6 +1016,9 @@ function renderMain(){
   } else if(state.currentTab === "mytasks"){
     renderMyTasksTab(main);
     return;
+  } else if(state.currentTab === "dagoverzicht" || state.currentTab === "teamoverzicht"){
+    renderDagoverzichtTab(main);
+    return;
   } else if(state.currentTab === "prognose"){
     renderPrognoseTab(main);
     return;
@@ -1136,6 +1166,57 @@ function renderMyTasksTab(main){
   attachItemHandlers();
 }
 
+function renderDagoverzichtTab(main){
+  const codeLabel = { W:"Wissel", V:"Vertrek", LU:"Vertrek", A:"Aankomst", VI:"Aankomst" };
+  const statusLabelMap = { todo:"Schoonmaak", klaar:"Klaar", gecheckt:"Gecheckt" };
+  const sortPriority = { W:0, V:1, LU:1, A:2, VI:2 };
+
+  const accomItems = state.accommodations
+    .map(name=>({ name, e:getEntry("accom:"+name) }))
+    .filter(it=>it.e.arrival && it.e.assignee)
+    .sort((a,b)=>(sortPriority[a.e.arrival]??9)-(sortPriority[b.e.arrival]??9))
+    .map(it=>({
+      name: it.name,
+      typeLabel: codeLabel[it.e.arrival] || it.e.arrival,
+      typeClass: it.e.arrival === "W" ? "badge-w" : (it.e.arrival === "V" || it.e.arrival === "LU") ? "badge-v" : "badge-a",
+      assignee: it.e.assignee,
+      statusKey: it.e.status || "todo",
+      statusText: statusLabelMap[it.e.status || "todo"]
+    }));
+
+  const fixedItems = state.fixedTasks
+    .map(name=>({ name, e:getEntry("fixed:"+name) }))
+    .filter(it=>it.e.assignee)
+    .map(it=>({
+      name: it.name,
+      assignee: it.e.assignee,
+      statusKey: it.e.status || "todo",
+      statusText: statusLabelMap[it.e.status || "todo"]
+    }));
+
+  function renderList(items, withType){
+    return `<ul class="dagoverzicht-list">` + items.map(it=>`
+      <li>
+        <span class="prognose-detail-name">${escapeHtml(it.name)}</span>
+        ${withType ? `<span class="badge ${it.typeClass}">${it.typeLabel}</span>` : ""}
+        <span class="prognose-detail-meta">${escapeHtml(it.assignee)}</span>
+        <span class="badge status-badge-${it.statusKey} status-badge-end">${it.statusText}</span>
+      </li>
+    `).join("") + `</ul>`;
+  }
+
+  let html = `<div class="sync-intro" style="margin-bottom:14px;">Toegewezen taken van ${escapeHtml(dayLabelText(state.currentDate))}, per soort, met de status van elke taak.</div>`;
+  if(accomItems.length === 0 && fixedItems.length === 0){
+    html += '<div class="empty">Nog niets toegewezen voor deze dag.</div>';
+  } else {
+    html += `<div class="section-label" style="margin-top:0;">Accommodaties</div>`;
+    html += accomItems.length > 0 ? renderList(accomItems, true) : '<div class="empty">Nog niets toegewezen.</div>';
+    html += `<div class="section-label">Vaste taken</div>`;
+    html += fixedItems.length > 0 ? renderList(fixedItems, false) : '<div class="empty">Nog niets toegewezen.</div>';
+  }
+  main.innerHTML = html;
+}
+
 function renderPrognoseTab(main){
   const dayNames = ["zo","ma","di","wo","do","vr","za"];
   const months = ["jan","feb","mrt","apr","mei","jun","jul","aug","sep","okt","nov","dec"];
@@ -1190,7 +1271,7 @@ function renderPrognoseTab(main){
                 <span class="prognose-detail-name">${escapeHtml(it.name)}</span>
                 <span class="badge ${it.codeText.startsWith('Wissel')?'badge-w':it.codeText.startsWith('Vertrek')?'badge-v':'badge-a'}">${it.codeText}</span>
                 <span class="prognose-detail-meta">${escapeHtml(it.assignee)}</span>
-                <span class="badge status-badge-${it.statusKey}">${it.statusText}</span>
+                <span class="badge status-badge-${it.statusKey} status-badge-end">${it.statusText}</span>
               </li>
             `).join("")}
           </ul>
