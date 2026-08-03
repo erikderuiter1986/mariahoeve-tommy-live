@@ -9,7 +9,7 @@ Een klein, altijd actief programma dat de Tommy iCal feed periodiek ophaalt en a
 - Vijf minuten om twee omgevingsvariabelen in te stellen
 
 ## Lokaal proberen, bijvoorbeeld op de MacBook
-
+E
 ```
 cd tommy-live-service
 npm install
