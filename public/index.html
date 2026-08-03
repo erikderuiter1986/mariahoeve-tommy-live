@@ -722,11 +722,11 @@
     <div class="summary-strip" id="summaryStrip"></div>
     <nav class="tabs">
       <button class="tab-btn desktop-only-tab" data-tab="accom">Accommodaties</button>
+      <button class="tab-btn desktop-only-tab" data-tab="fixed">Vaste taken</button>
       <button class="tab-btn desktop-only-tab" data-tab="dagoverzicht">Dagoverzicht</button>
       <button class="tab-btn mobile-only-tab" data-tab="mytasks">Mijn taken</button>
       <button class="tab-btn mobile-only-tab" data-tab="teamoverzicht">Team</button>
       <button class="tab-btn" data-tab="prognose">Prognose</button>
-      <button class="tab-btn desktop-only-tab" data-tab="fixed">Vaste taken</button>
       <button class="tab-btn desktop-only-tab" data-tab="team">Team</button>
       <button class="tab-btn desktop-only-tab" data-tab="admin">Admin</button>
     </nav>
@@ -986,7 +986,16 @@ function render(){
 }
 
 function renderSummary(){
-  const ids = state.accommodations.map(n=>"accom:"+n).concat(state.fixedTasks.map(n=>"fixed:"+n));
+  const relevantAccomIds = state.accommodations
+    .filter(name=>{
+      const e = getEntry("accom:"+name);
+      return e.arrival && e.assignee;
+    })
+    .map(n=>"accom:"+n);
+  const assignedFixedIds = state.fixedTasks
+    .filter(name=>getEntry("fixed:"+name).assignee)
+    .map(n=>"fixed:"+n);
+  const ids = relevantAccomIds.concat(assignedFixedIds);
   let counts = {todo:0, klaar:0, gecheckt:0};
   ids.forEach(id=>{
     const e = getEntry(id);
