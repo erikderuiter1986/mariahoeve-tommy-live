@@ -1044,11 +1044,24 @@ function renderMain(){
     renderPrognoseTab(main);
     return;
   } else if(state.currentTab === "fixed"){
+    let html = "";
+    if(state.managerUnlocked){
+      html += `
+        <div class="add-row" style="margin-bottom:14px;">
+          <input type="text" id="newFixedInline" placeholder="Naam nieuwe taak">
+          <button id="addFixedInlineBtn">Toevoegen</button>
+        </div>
+      `;
+    }
     if(state.fixedTasks.length === 0){
-      main.innerHTML = '<div class="empty">Geen vaste taken ingesteld.</div>';
+      html += '<div class="empty">Geen vaste taken ingesteld.</div>';
+      main.innerHTML = html;
+      attachFixedInlineHandler();
       return;
     }
-    main.innerHTML = state.fixedTasks.map(name=>renderItemCard("fixed", name)).join("");
+    html += state.fixedTasks.map(name=>renderItemCard("fixed", name)).join("");
+    main.innerHTML = html;
+    attachFixedInlineHandler();
   } else if(state.currentTab === "team"){
     renderTeamTab(main);
     return;
@@ -1057,6 +1070,27 @@ function renderMain(){
     return;
   }
   attachItemHandlers();
+}
+
+function attachFixedInlineHandler(){
+  const btn = document.getElementById('addFixedInlineBtn');
+  if(!btn) return;
+  const doAdd = async ()=>{
+    const input = document.getElementById('newFixedInline');
+    const val = input.value.trim();
+    if(!val) return;
+    state.fixedTasks.push(val);
+    await saveList("fixed-tasks", state.fixedTasks);
+    showToast("Taak toegevoegd");
+    renderMain();
+  };
+  btn.addEventListener('click', doAdd);
+  const input = document.getElementById('newFixedInline');
+  if(input){
+    input.addEventListener('keydown', (e)=>{
+      if(e.key === 'Enter') doAdd();
+    });
+  }
 }
 
 function formatChangedAt(iso){
@@ -1106,7 +1140,8 @@ function renderItemCard(kind, name){
         `).join("")}
       </div>
     </div>` : "";
-  const statusBtns = STATUSES.filter(s=>kind==="accom" || !ACCOM_ONLY_STATUS_KEYS.includes(s.key)).map(s=>`
+  const FIXED_ALLOWED_STATUS_KEYS = ["klaar"];
+  const statusBtns = STATUSES.filter(s=> kind==="accom" ? true : FIXED_ALLOWED_STATUS_KEYS.includes(s.key)).map(s=>`
     <button class="status-btn ${e.status===s.key?'active-'+s.key:''}" data-id="${escapeAttr(id)}" data-status="${s.key}">${s.label}</button>
   `).join("");
   const changedLine = e.changedBy ? `<div class="changed-line">Laatst gewijzigd door ${escapeHtml(e.changedBy)}${e.changedAt ? ', ' + formatChangedAt(e.changedAt) : ''}</div>` : "";
