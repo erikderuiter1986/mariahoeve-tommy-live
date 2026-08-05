@@ -96,6 +96,13 @@
     cursor:pointer;
     flex-shrink:0;
   }
+  .refresh-live-btn{
+    background:var(--leaf-600);
+    color:var(--white);
+  }
+  .refresh-live-btn:hover{
+    background:var(--leaf-400);
+  }
   .date-nav button.arrow:hover{background:rgba(255,255,255,0.16);}
   .date-label{
     text-align:center;
@@ -211,6 +218,7 @@
     animation:popDone 0.45s ease;
   }
   .dot-todo{background:var(--coral-500);}
+  .dot-vertrekcheck{background:var(--sky-500);}
   .dot-bezig{background:var(--amber-500);}
   .dot-klaar{background:var(--leaf-400);}
   .dot-gecheckt{background:var(--leaf-600);}
@@ -325,6 +333,7 @@
     color:var(--ink-500);
   }
   .status-btn.active-todo{background:var(--coral-500); border-color:var(--coral-500); color:var(--white);}
+  .status-btn.active-vertrekcheck{background:var(--sky-500); border-color:var(--sky-500); color:var(--white);}
   .status-btn.active-bezig{background:var(--amber-500); border-color:var(--amber-500); color:var(--white);}
   .status-btn.active-klaar{background:var(--leaf-400); border-color:var(--leaf-400); color:var(--forest-900);}
   .status-btn.active-gecheckt{background:var(--leaf-600); border-color:var(--leaf-600); color:var(--white);}
@@ -622,6 +631,7 @@
   .badge-v{background:var(--lavender-500); color:var(--white);}
   .badge-w{background:var(--amber-500); color:var(--white);}
   .status-badge-todo{background:var(--coral-500); color:var(--white);}
+  .status-badge-vertrekcheck{background:var(--sky-500); color:var(--white);}
   .status-badge-klaar{background:var(--leaf-400); color:var(--forest-900);}
   .status-badge-gecheckt{background:var(--leaf-600); color:var(--white);}
   .badge-fixed{background:var(--lavender-500); color:var(--white);}
@@ -716,7 +726,7 @@
         <div class="day" id="dayLabel">—</div>
       </div>
       <button class="arrow" id="nextDay">›</button>
-      <button class="arrow" id="refreshBtn" title="Vernieuwen">↻</button>
+      <button class="arrow refresh-live-btn" id="refreshBtn" title="Ververs live">↻</button>
       <button class="arrow" id="lockToggle" title="Manager ontgrendelen">🔒</button>
     </div>
     <div class="summary-strip" id="summaryStrip"></div>
@@ -776,10 +786,12 @@ const LINEN_OPTIONS = [
   {code:"nee", label:"Nee"}
 ];
 const STATUSES = [
+  {key:"vertrekcheck", label:"Vertrekcheck"},
   {key:"todo", label:"Schoonmaak"},
   {key:"klaar", label:"Klaar"},
   {key:"gecheckt", label:"Gecheckt"}
 ];
+const ACCOM_ONLY_STATUS_KEYS = ["vertrekcheck"];
 
 let state = {
   accommodations: [],
@@ -791,7 +803,7 @@ let state = {
   allDays: {},
   openNotes: {},
   managerUnlocked: false,
-  managerPin: "0000"
+  managerPin: "205080"
 };
 
 function pad(n){ return n < 10 ? "0"+n : ""+n; }
@@ -931,13 +943,13 @@ async function init(){
     loadList("fixed-tasks", DEFAULT_FIXED_TASKS),
     loadList("staff", DEFAULT_STAFF),
     loadAllDays(),
-    loadList("manager-pin", "0000")
+    loadList("manager-pin", "205080")
   ]);
   state.accommodations = accommodations;
   state.fixedTasks = fixedTasks;
   state.staff = staff;
   state.allDays = allDays;
-  state.managerPin = managerPin || "0000";
+  state.managerPin = managerPin || "205080";
   state.dayData = loadDay(dateKey(state.currentDate));
   render();
 }
@@ -996,13 +1008,14 @@ function renderSummary(){
     .filter(name=>getEntry("fixed:"+name).assignee)
     .map(n=>"fixed:"+n);
   const ids = relevantAccomIds.concat(assignedFixedIds);
-  let counts = {todo:0, klaar:0, gecheckt:0};
+  let counts = {vertrekcheck:0, todo:0, klaar:0, gecheckt:0};
   ids.forEach(id=>{
     const e = getEntry(id);
     counts[e.status] = (counts[e.status]||0)+1;
   });
   const strip = document.getElementById('summaryStrip');
   strip.innerHTML = `
+    <div class="chip"><b>${counts.vertrekcheck}</b><span>Vertrekcheck</span></div>
     <div class="chip"><b>${counts.todo}</b><span>Te doen</span></div>
     <div class="chip"><b>${counts.klaar}</b><span>Klaar</span></div>
     <div class="chip"><b>${counts.gecheckt}</b><span>Gecheckt</span></div>
@@ -1010,7 +1023,7 @@ function renderSummary(){
 }
 
 function statusDotClass(status){
-  return {todo:"dot-todo", klaar:"dot-klaar", gecheckt:"dot-gecheckt"}[status] || "dot-todo";
+  return {vertrekcheck:"dot-vertrekcheck", todo:"dot-todo", klaar:"dot-klaar", gecheckt:"dot-gecheckt"}[status] || "dot-todo";
 }
 
 function renderMain(){
@@ -1020,8 +1033,7 @@ function renderMain(){
       main.innerHTML = '<div class="empty">Nog geen accommodaties toegevoegd. Ga naar Team om de lijst te beheren.</div>';
       return;
     }
-    main.innerHTML = '<div class="quick-sync-row"><button id="liveSyncBtn" class="quick-sync-btn live-sync-btn">Ververs live</button></div>' +
-      renderTimelineGroups();
+    main.innerHTML = renderTimelineGroups();
   } else if(state.currentTab === "mytasks"){
     renderMyTasksTab(main);
     return;
@@ -1094,7 +1106,7 @@ function renderItemCard(kind, name){
         `).join("")}
       </div>
     </div>` : "";
-  const statusBtns = STATUSES.map(s=>`
+  const statusBtns = STATUSES.filter(s=>kind==="accom" || !ACCOM_ONLY_STATUS_KEYS.includes(s.key)).map(s=>`
     <button class="status-btn ${e.status===s.key?'active-'+s.key:''}" data-id="${escapeAttr(id)}" data-status="${s.key}">${s.label}</button>
   `).join("");
   const changedLine = e.changedBy ? `<div class="changed-line">Laatst gewijzigd door ${escapeHtml(e.changedBy)}${e.changedAt ? ', ' + formatChangedAt(e.changedAt) : ''}</div>` : "";
@@ -1177,7 +1189,7 @@ function renderMyTasksTab(main){
 
 function renderDagoverzichtTab(main){
   const codeLabel = { W:"Wissel", V:"Vertrek", LU:"Vertrek", A:"Aankomst", VI:"Aankomst" };
-  const statusLabelMap = { todo:"Schoonmaak", klaar:"Klaar", gecheckt:"Gecheckt" };
+  const statusLabelMap = { vertrekcheck:"Vertrekcheck", todo:"Schoonmaak", klaar:"Klaar", gecheckt:"Gecheckt" };
   const sortPriority = { W:0, V:1, LU:1, A:2, VI:2 };
 
   const accomItems = state.accommodations
@@ -1230,8 +1242,8 @@ function renderPrognoseTab(main){
   const dayNames = ["zo","ma","di","wo","do","vr","za"];
   const months = ["jan","feb","mrt","apr","mei","jun","jul","aug","sep","okt","nov","dec"];
   const codeLabel = { W:"Wissel", V:"Vertrek", LU:"Vertrek (late uitcheck)", A:"Aankomst", VI:"Aankomst (vroege incheck)" };
-  const statusLabelMap = { todo:"Schoonmaak", klaar:"Klaar", gecheckt:"Gecheckt" };
-  let html = '<div class="quick-sync-row"><button id="prognoseLiveSyncBtn" class="quick-sync-btn live-sync-btn">Ververs live</button></div>';
+  const statusLabelMap = { vertrekcheck:"Vertrekcheck", todo:"Schoonmaak", klaar:"Klaar", gecheckt:"Gecheckt" };
+  let html = '';
   html += `<div class="sync-intro" style="margin-bottom:14px;">Vooruitblik voor de komende tien dagen: hoeveel accommodaties aankomst, vertrek of wissel hebben. Klik op een dag voor de details.</div>`;
   for(let i=0;i<10;i++){
     const d = new Date(state.currentDate);
@@ -1289,10 +1301,6 @@ function renderPrognoseTab(main){
     }
   }
   main.innerHTML = html;
-  const prognoseLiveSync = document.getElementById('prognoseLiveSyncBtn');
-  if(prognoseLiveSync){
-    prognoseLiveSync.addEventListener('click', fetchLiveDay);
-  }
   document.querySelectorAll('.prognose-row-clickable').forEach(row=>{
     row.addEventListener('click', ()=>{
       const dKey = row.dataset.day;
@@ -1371,10 +1379,6 @@ async function fetchLiveDay(){
 }
 
 function attachItemHandlers(){
-  const liveSync = document.getElementById('liveSyncBtn');
-  if(liveSync){
-    liveSync.addEventListener('click', fetchLiveDay);
-  }
   document.querySelectorAll('.arrival-btn').forEach(btn=>{
     btn.addEventListener('click', ()=>{
       const id = btn.dataset.id;
@@ -1508,7 +1512,6 @@ function renderAdminTab(main){
     </div>
     <div class="quick-sync-row" style="display:flex;">
       <button id="topIcsBtn" class="quick-sync-btn">Ververs met iCal</button>
-      <button id="topLiveSyncBtn" class="quick-sync-btn live-sync-btn">Ververs live</button>
     </div>
     <div class="section-label" style="margin-top:0;">Serverkoppeling</div>
     <div class="sync-box">
@@ -1527,7 +1530,7 @@ function renderAdminTab(main){
       <div class="sync-intro" style="margin-bottom:10px;">
         Deze code moet ingevoerd worden om medewerkers aan een accommodatie toe te wijzen. Iedereen kan de status nog gewoon wijzigen, schoonmaak, klaar, gecheckt, dat blijft altijd open.
       </div>
-      <input type="text" id="managerPinInput" class="add-row-input" placeholder="0000" maxlength="4" value="${escapeAttr(state.managerPin||'')}" style="width:100%; border:1px solid var(--line); border-radius:9px; padding:9px 10px; font-size:13px;">
+      <input type="text" id="managerPinInput" class="add-row-input" placeholder="205080" maxlength="10" value="${escapeAttr(state.managerPin||'')}" style="width:100%; border:1px solid var(--line); border-radius:9px; padding:9px 10px; font-size:13px;">
       <div class="sync-actions">
         <button id="saveManagerPinBtn">Opslaan</button>
       </div>
@@ -1555,8 +1558,8 @@ function renderAdminTab(main){
   });
   document.getElementById('saveManagerPinBtn').addEventListener('click', async ()=>{
     const pin = document.getElementById('managerPinInput').value.trim();
-    if(!/^\d{4}$/.test(pin)){
-      showToast("Gebruik precies vier cijfers");
+    if(!/^\d{4,10}$/.test(pin)){
+      showToast("Gebruik alleen cijfers, tussen de 4 en 10");
       return;
     }
     state.managerPin = pin;
@@ -1566,10 +1569,6 @@ function renderAdminTab(main){
   document.getElementById('topIcsBtn').addEventListener('click', ()=>{
     document.getElementById('icsFile').click();
   });
-  const topLiveSyncBtn = document.getElementById('topLiveSyncBtn');
-  if(topLiveSyncBtn){
-    topLiveSyncBtn.addEventListener('click', fetchLiveDay);
-  }
   document.getElementById('icsFile').addEventListener('change', (e)=>{
     const file = e.target.files[0];
     if(!file) return;
@@ -1685,9 +1684,9 @@ function escapeAttr(s){ return escapeHtml(s); }
 document.getElementById('prevDay').addEventListener('click', ()=>switchDay(-1));
 document.getElementById('nextDay').addEventListener('click', ()=>switchDay(1));
 document.getElementById('refreshBtn').addEventListener('click', async ()=>{
-  document.getElementById('main').innerHTML = '<div class="loading">Vernieuwen…</div>';
+  document.getElementById('main').innerHTML = '<div class="loading">Ververs live…</div>';
   await init();
-  showToast("Vernieuwd");
+  await fetchLiveDay();
 });
 document.getElementById('lockToggle').addEventListener('click', ()=>{
   if(state.managerUnlocked){
