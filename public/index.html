@@ -188,6 +188,18 @@
     gap:8px;
     min-width:0;
   }
+  .rename-btn{
+    background:none;
+    border:none;
+    cursor:pointer;
+    font-size:13px;
+    padding:2px;
+    flex-shrink:0;
+    opacity:0.7;
+  }
+  .rename-btn:hover{
+    opacity:1;
+  }
   .card-title .name{
     font-family:var(--font-display);
     font-weight:600;
@@ -1151,6 +1163,7 @@ function renderItemCard(kind, name){
         <div class="card-title">
           <span class="status-dot ${statusDotClass(e.status)}"></span>
           <span class="name">${escapeHtml(name)}</span>
+          ${state.managerUnlocked ? `<button class="rename-btn" data-kind="${kind}" data-name="${escapeAttr(name)}" title="Naam aanpassen">✏️</button>` : ""}
         </div>
       </div>
       ${arrivalBtns}
@@ -1414,6 +1427,29 @@ async function fetchLiveDay(){
 }
 
 function attachItemHandlers(){
+  document.querySelectorAll('.rename-btn').forEach(btn=>{
+    btn.addEventListener('click', async ()=>{
+      const kind = btn.dataset.kind;
+      const oldName = btn.dataset.name;
+      const newName = window.prompt("Nieuwe naam:", oldName);
+      if(newName === null) return;
+      const trimmed = newName.trim();
+      if(!trimmed || trimmed === oldName) return;
+      if(kind === "accom"){
+        const idx = state.accommodations.indexOf(oldName);
+        if(idx === -1) return;
+        state.accommodations[idx] = trimmed;
+        await saveList("accommodations", state.accommodations);
+      } else {
+        const idx = state.fixedTasks.indexOf(oldName);
+        if(idx === -1) return;
+        state.fixedTasks[idx] = trimmed;
+        await saveList("fixed-tasks", state.fixedTasks);
+      }
+      showToast("Naam aangepast");
+      renderMain();
+    });
+  });
   document.querySelectorAll('.arrival-btn').forEach(btn=>{
     btn.addEventListener('click', ()=>{
       const id = btn.dataset.id;
