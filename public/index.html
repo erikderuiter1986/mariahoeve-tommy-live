@@ -963,8 +963,25 @@ async function init(){
   state.staff = staff;
   state.allDays = allDays;
   state.managerPin = managerPin || "205080";
+  const cleaned = cleanupAccidentalTodoStatus();
+  if(cleaned) await doPersistAllDays();
   state.dayData = loadDay(dateKey(state.currentDate));
   render();
+}
+
+function cleanupAccidentalTodoStatus(){
+  let changed = false;
+  Object.keys(state.allDays).forEach(dKey=>{
+    const dayData = state.allDays[dKey];
+    Object.keys(dayData).forEach(id=>{
+      const e = dayData[id];
+      if(e && e.status === "todo" && !e.changedBy){
+        e.status = "";
+        changed = true;
+      }
+    });
+  });
+  return changed;
 }
 
 function renderConnectionSetup(){
