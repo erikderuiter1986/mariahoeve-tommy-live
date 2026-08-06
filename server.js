@@ -39,6 +39,13 @@ const KNOWN_ACCOMMODATIONS = [
 ];
 const KNOWN_LOWER = KNOWN_ACCOMMODATIONS.map(n => n.toLowerCase());
 
+// Tommy gebruikt soms een andere naam intern dan de naam die wij gebruiken.
+// Linkerkant is de naam zoals die in Tommy's boekingen staat, rechterkant is
+// onze eigen naam. Voeg hier gerust meer aan toe als dit vaker voorkomt.
+const NAME_ALIASES = {
+  "boshut": "Oehoe"
+};
+
 let latestEvents = [];
 let lastFetchedAt = null;
 let lastError = null;
@@ -82,7 +89,11 @@ function computeForDate(dateStr) {
   const target = dateStr.replace(/-/g, "");
   const perAccom = {};
   latestEvents.forEach(ev => {
-    const idx = KNOWN_LOWER.indexOf(ev.name.toLowerCase());
+    const lower = ev.name.toLowerCase();
+    const aliasName = NAME_ALIASES[lower];
+    const idx = aliasName
+      ? KNOWN_LOWER.indexOf(aliasName.toLowerCase())
+      : KNOWN_LOWER.indexOf(lower);
     if (idx === -1) return;
     const realName = KNOWN_ACCOMMODATIONS[idx];
     if (!perAccom[realName]) perAccom[realName] = { arrival: false, departure: false };
