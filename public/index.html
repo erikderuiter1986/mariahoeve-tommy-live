@@ -230,6 +230,7 @@
     animation:popDone 0.45s ease;
   }
   .dot-todo{background:var(--coral-500);}
+  .dot-blank{background:#c7c0ab;}
   .dot-vertrekcheck{background:var(--sky-500);}
   .dot-bezig{background:var(--amber-500);}
   .dot-klaar{background:var(--leaf-400);}
@@ -932,7 +933,7 @@ function saveDay(key, value){
 }
 
 function getEntry(id){
-  return state.dayData[id] || { arrival:"", assignee:"", status:"todo", note:"", linen:"onbekend" };
+  return state.dayData[id] || { arrival:"", assignee:"", status:"", note:"", linen:"onbekend" };
 }
 function setEntry(id, patch){
   const cur = getEntry(id);
@@ -1023,7 +1024,8 @@ function renderSummary(){
   let counts = {vertrekcheck:0, todo:0, klaar:0, gecheckt:0};
   ids.forEach(id=>{
     const e = getEntry(id);
-    counts[e.status] = (counts[e.status]||0)+1;
+    const key = e.status || "todo";
+    counts[key] = (counts[key]||0)+1;
   });
   const strip = document.getElementById('summaryStrip');
   strip.innerHTML = `
@@ -1035,7 +1037,7 @@ function renderSummary(){
 }
 
 function statusDotClass(status){
-  return {vertrekcheck:"dot-vertrekcheck", todo:"dot-todo", klaar:"dot-klaar", gecheckt:"dot-gecheckt"}[status] || "dot-todo";
+  return {vertrekcheck:"dot-vertrekcheck", todo:"dot-todo", klaar:"dot-klaar", gecheckt:"dot-gecheckt"}[status] || "dot-blank";
 }
 
 function renderMain(){
@@ -1396,7 +1398,7 @@ async function fetchLiveForDateKey(dKey){
   const dayData = state.allDays[dKey];
   (data.items||[]).forEach(item=>{
     const id = "accom:"+item.accommodatie;
-    const cur = dayData[id] || { arrival:"", assignee:"", status:"todo", note:"", linen:"onbekend" };
+    const cur = dayData[id] || { arrival:"", assignee:"", status:"", note:"", linen:"onbekend" };
     dayData[id] = Object.assign({}, cur, { arrival: item.code });
   });
   if(dKey === dateKey(state.currentDate)){
