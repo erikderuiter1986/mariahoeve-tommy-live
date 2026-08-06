@@ -1149,6 +1149,25 @@ function renderNoteSection(id, e, showNote){
   return "";
 }
 
+function findNextArrival(accomName){
+  const dayNames = ["zo","ma","di","wo","do","vr","za"];
+  const months = ["jan","feb","mrt","apr","mei","jun","jul","aug","sep","okt","nov","dec"];
+  const base = new Date(state.currentDate);
+  for(let i=1;i<=21;i++){
+    const d = new Date(base);
+    d.setDate(d.getDate()+i);
+    const dKey = dateKey(d);
+    const dayData = state.allDays[dKey];
+    if(dayData){
+      const e = dayData["accom:"+accomName];
+      if(e && (e.arrival === "A" || e.arrival === "VI" || e.arrival === "W")){
+        return dayNames[d.getDay()] + " " + d.getDate() + " " + months[d.getMonth()];
+      }
+    }
+  }
+  return null;
+}
+
 function renderItemCard(kind, name){
   const id = kind+":"+name;
   const e = getEntry(id);
@@ -1176,6 +1195,11 @@ function renderItemCard(kind, name){
     <button class="status-btn ${e.status===s.key?'active-'+s.key:''}" data-id="${escapeAttr(id)}" data-status="${s.key}">${s.label}</button>
   `).join("");
   const changedLine = e.changedBy ? `<div class="changed-line">Laatst gewijzigd door ${escapeHtml(e.changedBy)}${e.changedAt ? ', ' + formatChangedAt(e.changedAt) : ''}</div>` : "";
+  let nextArrivalLine = "";
+  if(kind === "accom" && (e.arrival === "V" || e.arrival === "LU")){
+    const next = findNextArrival(name);
+    nextArrivalLine = `<div class="lock-hint">${next ? 'Volgende aankomst: ' + escapeHtml(next) : 'Nog geen volgende aankomst bekend'}</div>`;
+  }
   return `
     <div class="card">
       <div class="card-head">
@@ -1186,6 +1210,7 @@ function renderItemCard(kind, name){
         </div>
       </div>
       ${arrivalBtns}
+      ${nextArrivalLine}
       ${linenBtns}
       <div class="row2">
         <select data-id="${escapeAttr(id)}" class="assignee-select" ${state.managerUnlocked ? '' : 'disabled'}>${staffOptions}</select>
@@ -1311,8 +1336,8 @@ function renderPrognoseTab(main){
   const codeLabel = { W:"Wissel", V:"Vertrek", LU:"Vertrek (late uitcheck)", A:"Aankomst", VI:"Aankomst (vroege incheck)" };
   const statusLabelMap = { vertrekcheck:"Vertrekcheck", todo:"Schoonmaak", klaar:"Klaar", gecheckt:"Gecheckt" };
   let html = '';
-  html += `<div class="sync-intro" style="margin-bottom:14px;">Vooruitblik voor de komende tien dagen: hoeveel accommodaties aankomst, vertrek of wissel hebben. Klik op een dag voor de details.</div>`;
-  for(let i=0;i<10;i++){
+  html += `<div class="sync-intro" style="margin-bottom:14px;">Vooruitblik voor de komende eenentwintig dagen: hoeveel accommodaties aankomst, vertrek of wissel hebben. Klik op een dag voor de details. Let op, dit is een momentopname, ververs regelmatig om last minute boekingen mee te pakken.</div>`;
+  for(let i=0;i<21;i++){
     const d = new Date(state.currentDate);
     d.setDate(d.getDate()+i);
     const dKey = dateKey(d);
@@ -1429,9 +1454,9 @@ async function fetchLiveDay(){
     showToast("Nog geen toegangssleutel ingesteld, zie Admin tab");
     return;
   }
-  showToast("Komende 10 dagen live ophalen…");
+  showToast("Komende 21 dagen live ophalen…");
   let total = 0;
-  for(let i=0;i<10;i++){
+  for(let i=0;i<21;i++){
     const d = new Date(state.currentDate);
     d.setDate(d.getDate()+i);
     try{
@@ -1441,7 +1466,7 @@ async function fetchLiveDay(){
     }
   }
   await doPersistAllDays();
-  showToast(`Komende 10 dagen bijgewerkt, ${total} keer een aankomst, vertrek of wissel gezet`);
+  showToast(`Komende 21 dagen bijgewerkt, ${total} keer een aankomst, vertrek of wissel gezet`);
   renderMain();
 }
 
