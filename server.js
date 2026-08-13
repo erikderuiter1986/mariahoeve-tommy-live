@@ -43,7 +43,8 @@ const KNOWN_LOWER = KNOWN_ACCOMMODATIONS.map(n => n.toLowerCase());
 // Linkerkant is de naam zoals die in Tommy's boekingen staat, rechterkant is
 // onze eigen naam. Voeg hier gerust meer aan toe als dit vaker voorkomt.
 const NAME_ALIASES = {
-  "boshut": "Oehoe"
+  "boshut": "Oehoe",
+  "meerhut": "Kwaak"
 };
 
 let latestEvents = [];
