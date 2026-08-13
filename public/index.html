@@ -741,17 +741,17 @@
       <button class="arrow" id="nextDay">›</button>
       <button class="arrow refresh-live-btn" id="refreshBtn" title="Ververs live">↻</button>
       <button class="arrow" id="lockToggle" title="Manager ontgrendelen">🔒</button>
+      <button class="arrow desktop-only-tab" id="settingsToggle" title="Instellingen">⚙️</button>
     </div>
     <div class="summary-strip" id="summaryStrip"></div>
     <nav class="tabs">
       <button class="tab-btn desktop-only-tab" data-tab="accom">Accommodaties</button>
-      <button class="tab-btn desktop-only-tab" data-tab="fixed">Vaste taken</button>
+      <button class="tab-btn desktop-only-tab" data-tab="sanitair">Sanitair</button>
+      <button class="tab-btn desktop-only-tab" data-tab="fixed">Overig</button>
       <button class="tab-btn desktop-only-tab" data-tab="dagoverzicht">Dagoverzicht</button>
       <button class="tab-btn mobile-only-tab" data-tab="mytasks">Mijn taken</button>
       <button class="tab-btn mobile-only-tab" data-tab="teamoverzicht">Team</button>
       <button class="tab-btn" data-tab="prognose">Prognose</button>
-      <button class="tab-btn desktop-only-tab" data-tab="team">Team</button>
-      <button class="tab-btn desktop-only-tab" data-tab="admin">Admin</button>
     </nav>
   </header>
   <main id="main">
@@ -774,10 +774,12 @@ const DEFAULT_ACCOMMODATIONS = [
 // Big tipi in het bos, De Kring, LouLou, MeerHut, Meerzicht, Otje, Silo, Sprite
 // Kampeerplaatsen, geen housekeeping nodig: G 082, G 085, G 086
 const DEFAULT_FIXED_TASKS = [
-  "Toiletgebouwen ochtend","Toiletgebouwen middag","Toiletgebouwen avond",
   "Sauna ochtend","Sauna avond","Sauna na 22:00",
   "Receptie","Fortune koffiemachine","Receptie rondom","Keet","Schoonmaakhok",
-  "Villa","Toilet villa","Ramen wassen slaapwagens","Receptie + ramen wassen","Keet + ramen wassen"
+  "Villa","Ramen wassen slaapwagens","Receptie + ramen wassen","Keet + ramen wassen"
+];
+const DEFAULT_SANITAIR_TASKS = [
+  "Toiletgebouwen ochtend","Toiletgebouwen middag","Toiletgebouwen avond","Toilet villa"
 ];
 const DEFAULT_STAFF = [
   "Erik de Ruiter","Gerard Veenstra",
@@ -809,6 +811,7 @@ const ACCOM_ONLY_STATUS_KEYS = ["vertrekcheck"];
 let state = {
   accommodations: [],
   fixedTasks: [],
+  sanitairTasks: [],
   staff: [],
   currentDate: new Date(),
   currentTab: "mytasks",
@@ -951,15 +954,17 @@ async function init(){
   document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
   const activeBtn = document.querySelector(`.tab-btn[data-tab="${state.currentTab}"]`);
   if(activeBtn) activeBtn.classList.add('active');
-  const [accommodations, fixedTasks, staff, allDays, managerPin] = await Promise.all([
+  const [accommodations, fixedTasks, sanitairTasks, staff, allDays, managerPin] = await Promise.all([
     loadList("accommodations", DEFAULT_ACCOMMODATIONS),
     loadList("fixed-tasks", DEFAULT_FIXED_TASKS),
+    loadList("sanitair-tasks", DEFAULT_SANITAIR_TASKS),
     loadList("staff", DEFAULT_STAFF),
     loadAllDays(),
     loadList("manager-pin", "205080")
   ]);
   state.accommodations = accommodations;
   state.fixedTasks = fixedTasks;
+  state.sanitairTasks = sanitairTasks;
   state.staff = staff;
   state.allDays = allDays;
   state.managerPin = managerPin || "205080";
@@ -1074,6 +1079,25 @@ function renderMain(){
   } else if(state.currentTab === "prognose"){
     renderPrognoseTab(main);
     return;
+  } else if(state.currentTab === "sanitair"){
+    let html = "";
+    if(state.managerUnlocked){
+      html += `
+        <div class="add-row" style="margin-bottom:14px;">
+          <input type="text" id="newSanitairInline" placeholder="Naam nieuwe taak">
+          <button id="addSanitairInlineBtn">Toevoegen</button>
+        </div>
+      `;
+    }
+    if(state.sanitairTasks.length === 0){
+      html += '<div class="empty">Geen sanitairtaken ingesteld.</div>';
+      main.innerHTML = html;
+      attachSanitairInlineHandler();
+      return;
+    }
+    html += state.sanitairTasks.map(name=>renderItemCard("sanitair", name)).join("");
+    main.innerHTML = html;
+    attachSanitairInlineHandler();
   } else if(state.currentTab === "fixed"){
     let html = "";
     if(state.managerUnlocked){
@@ -1093,6 +1117,9 @@ function renderMain(){
     html += state.fixedTasks.map(name=>renderItemCard("fixed", name)).join("");
     main.innerHTML = html;
     attachFixedInlineHandler();
+  } else if(state.currentTab === "settings"){
+    renderSettingsTab(main);
+    return;
   } else if(state.currentTab === "team"){
     renderTeamTab(main);
     return;
@@ -1101,6 +1128,27 @@ function renderMain(){
     return;
   }
   attachItemHandlers();
+}
+
+function attachSanitairInlineHandler(){
+  const btn = document.getElementById('addSanitairInlineBtn');
+  if(!btn) return;
+  const doAdd = async ()=>{
+    const input = document.getElementById('newSanitairInline');
+    const val = input.value.trim();
+    if(!val) return;
+    state.sanitairTasks.push(val);
+    await saveList("sanitair-tasks", state.sanitairTasks);
+    showToast("Taak toegevoegd");
+    renderMain();
+  };
+  btn.addEventListener('click', doAdd);
+  const input = document.getElementById('newSanitairInline');
+  if(input){
+    input.addEventListener('keydown', (e)=>{
+      if(e.key === 'Enter') doAdd();
+    });
+  }
 }
 
 function attachFixedInlineHandler(){
@@ -1307,6 +1355,16 @@ function renderDagoverzichtTab(main){
       statusText: statusLabelMap[it.e.status || "todo"]
     }));
 
+  const sanitairItems = state.sanitairTasks
+    .map(name=>({ name, e:getEntry("sanitair:"+name) }))
+    .filter(it=>it.e.assignee)
+    .map(it=>({
+      name: it.name,
+      assignee: it.e.assignee,
+      statusKey: it.e.status || "todo",
+      statusText: statusLabelMap[it.e.status || "todo"]
+    }));
+
   function renderList(items, withType){
     return `<ul class="dagoverzicht-list">` + items.map(it=>`
       <li>
@@ -1319,12 +1377,14 @@ function renderDagoverzichtTab(main){
   }
 
   let html = `<div class="sync-intro" style="margin-bottom:14px;">Toegewezen taken van ${escapeHtml(dayLabelText(state.currentDate))}, per soort, met de status van elke taak.</div>`;
-  if(accomItems.length === 0 && fixedItems.length === 0){
+  if(accomItems.length === 0 && fixedItems.length === 0 && sanitairItems.length === 0){
     html += '<div class="empty">Nog niets toegewezen voor deze dag.</div>';
   } else {
     html += `<div class="section-label" style="margin-top:0;">Accommodaties</div>`;
     html += accomItems.length > 0 ? renderList(accomItems, true) : '<div class="empty">Nog niets toegewezen.</div>';
-    html += `<div class="section-label">Vaste taken</div>`;
+    html += `<div class="section-label">Sanitair</div>`;
+    html += sanitairItems.length > 0 ? renderList(sanitairItems, false) : '<div class="empty">Nog niets toegewezen.</div>';
+    html += `<div class="section-label">Overig</div>`;
     html += fixedItems.length > 0 ? renderList(fixedItems, false) : '<div class="empty">Nog niets toegewezen.</div>';
   }
   main.innerHTML = html;
@@ -1550,6 +1610,17 @@ function attachItemHandlers(){
   });
 }
 
+function renderSettingsTab(main){
+  main.innerHTML = `
+    <div class="section-label" style="margin-top:0;">Team</div>
+    <div id="settingsTeamBox"></div>
+    <div class="section-label">Admin</div>
+    <div id="settingsAdminBox"></div>
+  `;
+  renderTeamTab(document.getElementById('settingsTeamBox'));
+  renderAdminTab(document.getElementById('settingsAdminBox'));
+}
+
 function renderTeamTab(main){
   main.innerHTML = `
     <div class="section-label">Teamleden</div>
@@ -1566,10 +1637,17 @@ function renderTeamTab(main){
       <button id="addAccom">Toevoegen</button>
     </div>
 
-    <div class="section-label">Vaste taken</div>
+    <div class="section-label">Sanitair</div>
+    <ul class="team-list" id="sanitairList"></ul>
+    <div class="add-row">
+      <input type="text" id="newSanitair" placeholder="Naam sanitairtaak">
+      <button id="addSanitair">Toevoegen</button>
+    </div>
+
+    <div class="section-label">Overig</div>
     <ul class="team-list" id="fixedList"></ul>
     <div class="add-row">
-      <input type="text" id="newFixed" placeholder="Naam vaste taak">
+      <input type="text" id="newFixed" placeholder="Naam taak">
       <button id="addFixed">Toevoegen</button>
     </div>
   `;
@@ -1578,7 +1656,9 @@ function renderTeamTab(main){
   const accomList = document.getElementById('accomList');
   accomList.innerHTML = state.accommodations.map((s,i)=>`<li>${escapeHtml(s)}<button data-i="${i}" data-list="accommodations">Verwijderen</button></li>`).join("") || '<div class="empty">Nog geen accommodaties.</div>';
   const fixedList = document.getElementById('fixedList');
-  fixedList.innerHTML = state.fixedTasks.map((s,i)=>`<li>${escapeHtml(s)}<button data-i="${i}" data-list="fixedTasks">Verwijderen</button></li>`).join("") || '<div class="empty">Nog geen vaste taken.</div>';
+  fixedList.innerHTML = state.fixedTasks.map((s,i)=>`<li>${escapeHtml(s)}<button data-i="${i}" data-list="fixedTasks">Verwijderen</button></li>`).join("") || '<div class="empty">Nog geen taken.</div>';
+  const sanitairList = document.getElementById('sanitairList');
+  sanitairList.innerHTML = state.sanitairTasks.map((s,i)=>`<li>${escapeHtml(s)}<button data-i="${i}" data-list="sanitairTasks">Verwijderen</button></li>`).join("") || '<div class="empty">Nog geen sanitairtaken.</div>';
 
   document.querySelectorAll('[data-list]').forEach(btn=>{
     btn.addEventListener('click', async ()=>{
@@ -1587,6 +1667,7 @@ function renderTeamTab(main){
       if(list==="staff"){ state.staff.splice(i,1); await saveList("staff", state.staff); }
       if(list==="accommodations"){ state.accommodations.splice(i,1); await saveList("accommodations", state.accommodations); }
       if(list==="fixedTasks"){ state.fixedTasks.splice(i,1); await saveList("fixed-tasks", state.fixedTasks); }
+      if(list==="sanitairTasks"){ state.sanitairTasks.splice(i,1); await saveList("sanitair-tasks", state.sanitairTasks); }
       renderMain();
     });
   });
@@ -1615,6 +1696,15 @@ function renderTeamTab(main){
     if(!val) return;
     state.fixedTasks.push(val);
     await saveList("fixed-tasks", state.fixedTasks);
+    showToast("Taak toegevoegd");
+    renderMain();
+  });
+  document.getElementById('addSanitair').addEventListener('click', async ()=>{
+    const input = document.getElementById('newSanitair');
+    const val = input.value.trim();
+    if(!val) return;
+    state.sanitairTasks.push(val);
+    await saveList("sanitair-tasks", state.sanitairTasks);
     showToast("Taak toegevoegd");
     renderMain();
   });
@@ -1802,6 +1892,11 @@ document.getElementById('refreshBtn').addEventListener('click', async ()=>{
   document.getElementById('main').innerHTML = '<div class="loading">Ververs live…</div>';
   await init();
   await fetchLiveDay();
+});
+document.getElementById('settingsToggle').addEventListener('click', ()=>{
+  state.currentTab = "settings";
+  document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+  renderMain();
 });
 document.getElementById('lockToggle').addEventListener('click', ()=>{
   if(state.managerUnlocked){
