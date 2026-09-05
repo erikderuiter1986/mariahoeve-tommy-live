@@ -988,6 +988,7 @@
       <div class="nav-group-title">Receptie</div>
       <div class="nav-link-list">
         <button class="tab-btn nav-link-btn" data-tab="sauna">Sauna</button>
+        <button class="tab-btn nav-link-btn" data-tab="notities">Notities</button>
       </div>
     </div>
   </div>
@@ -1065,6 +1066,7 @@ let state = {
   openSaunaEdits: {},
   ontbijtOrders: [],
   confirmDelete: {},
+  dashboardNotes: [],
   managerUnlocked: false,
   managerPin: "205080"
 };
@@ -1224,7 +1226,7 @@ async function init(){
   document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
   const activeBtn = document.querySelector(`.tab-btn[data-tab="${state.currentTab}"]`);
   if(activeBtn) activeBtn.classList.add('active');
-  const [accommodations, fixedTasks, sanitairTasks, staff, allDays, managerPin, saunaReservations, ontbijtOrders] = await Promise.all([
+  const [accommodations, fixedTasks, sanitairTasks, staff, allDays, managerPin, saunaReservations, ontbijtOrders, dashboardNotes] = await Promise.all([
     loadList("accommodations", DEFAULT_ACCOMMODATIONS),
     loadList("fixed-tasks", DEFAULT_FIXED_TASKS),
     loadList("sanitair-tasks", DEFAULT_SANITAIR_TASKS),
@@ -1232,7 +1234,8 @@ async function init(){
     loadAllDays(),
     loadList("manager-pin", "205080"),
     loadList("sauna-reservations", []),
-    loadList("ontbijt-orders", [])
+    loadList("ontbijt-orders", []),
+    loadList("dashboard-notes", [])
   ]);
   state.accommodations = accommodations;
   state.fixedTasks = fixedTasks;
@@ -1242,6 +1245,7 @@ async function init(){
   state.managerPin = managerPin || "205080";
   state.saunaReservations = Array.isArray(saunaReservations) ? saunaReservations : [];
   state.ontbijtOrders = Array.isArray(ontbijtOrders) ? ontbijtOrders : [];
+  state.dashboardNotes = Array.isArray(dashboardNotes) ? dashboardNotes : [];
   const cleaned = cleanupAccidentalTodoStatus();
   if(cleaned) await doPersistAllDays();
   state.dayData = loadDay(dateKey(state.currentDate));
@@ -1352,6 +1356,9 @@ function renderMain(){
     return;
   } else if(state.currentTab === "prognose"){
     renderPrognoseTab(main);
+    return;
+  } else if(state.currentTab === "notities"){
+    renderNotitiesTab(main);
     return;
   } else if(state.currentTab === "dashboard"){
     renderDashboardTab(main);
@@ -2176,12 +2183,15 @@ function renderDashboardTab(main){
   const overigeKlaar = overigeRelevant.filter(e=>e.status === "klaar").length;
   const overigeNietKlaar = overigeRelevant.length - overigeKlaar;
 
-  let aankomst=0, vertrek=0, wissel=0;
+  let aankomst=0, vertrek=0;
   accomRelevant.forEach(it=>{
-    if(it.e.arrival === "W") wissel++;
-    else if(it.e.arrival === "V") vertrek++;
+    if(it.e.arrival === "V") vertrek++;
     else if(it.e.arrival === "A") aankomst++;
   });
+
+  const totalTasks = accomRelevant.length + overigeRelevant.length;
+  const doneTasks = accomCounts.gecheckt + overigeKlaar;
+  const openTasks = totalTasks - doneTasks;
 
   const workload = state.staff.map(s=>{
     const items = accomRelevant.filter(it=>it.e.assignee===s)
@@ -2192,7 +2202,7 @@ function renderDashboardTab(main){
   }).filter(w=>w.total>0);
 
   function hBar(segments, maxVal){
-    const W = 300, H = 24, gap = 2;
+    const W = 300, H = 24;
     let x = 0;
     const bars = segments.map(seg=>{
       const w = maxVal > 0 ? (seg.value / maxVal) * W : 0;
@@ -2203,9 +2213,69 @@ function renderDashboardTab(main){
     return `<svg viewBox="0 0 ${W} ${H}" width="100%" height="${H}" style="display:block;">${bars || `<rect x="0" y="0" width="${W}" height="${H}" fill="var(--line)" />`}</svg>`;
   }
 
+  function pieChart(segments, centerLabel){
+    const size = 140, r = 55, cx = size/2, cy = size/2, strokeW = 22;
+    const circumference = 2 * Math.PI * r;
+    const total = segments.reduce((sum,s)=>sum+s.value, 0);
+    let offset = 0;
+    const circles = total === 0
+      ? `<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="var(--line)" stroke-width="${strokeW}" />`
+      : segments.filter(s=>s.value>0).map(s=>{
+          const len = (s.value/total) * circumference;
+          const circle = `<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${s.color}" stroke-width="${strokeW}"
+            stroke-dasharray="${len.toFixed(1)} ${circumference.toFixed(1)}"
+            stroke-dashoffset="${(-offset).toFixed(1)}" transform="rotate(-90 ${cx} ${cy})" />`;
+          offset += len;
+          return circle;
+        }).join("");
+    return `<svg viewBox="0 0 ${size} ${size}" width="140" height="140">
+      ${circles}
+      <text x="${cx}" y="${cy-2}" text-anchor="middle" font-family="var(--font-display)" font-size="22" font-weight="700" fill="var(--ink-900)">${total}</text>
+      <text x="${cx}" y="${cy+16}" text-anchor="middle" font-size="10" fill="var(--ink-500)">${escapeHtml(centerLabel)}</text>
+    </svg>`;
+  }
+
+  function legendRow(color, label, value){
+    return `<div style="display:flex; align-items:center; gap:6px; font-size:12px; margin-bottom:4px;">
+      <span style="width:10px; height:10px; border-radius:3px; background:${color}; display:inline-block;"></span>
+      <span>${escapeHtml(label)}: <b>${value}</b></span>
+    </div>`;
+  }
+
+  const tomorrow = new Date(state.currentDate);
+  tomorrow.setDate(tomorrow.getDate()+1);
+  const tomorrowKey = dateKey(tomorrow);
+  const tomorrowOrders = getAllOntbijtOrders().filter(o=>o.datum === tomorrowKey);
+  const tomorrowTotals = {};
+  ONTBIJT_FIELDS.forEach(f=>{ tomorrowTotals[f] = tomorrowOrders.reduce((sum,o)=>sum+(Number(o[f])||0),0); });
+
   let html = `<div class="sync-intro" style="margin-bottom:14px;">Overzicht van wat er gedaan is en nog moet gebeuren voor ${escapeHtml(dayLabelText(state.currentDate))}.</div>`;
 
-  html += `<div class="section-label" style="margin-top:0;">Accommodaties, per stadium</div>`;
+  html += `<div class="section-label" style="margin-top:0;">Aankomst &amp; vertrek vandaag</div>`;
+  html += `<div class="card" style="margin-bottom:16px; display:flex; align-items:center; gap:16px;">
+    ${pieChart([
+      {value:aankomst, color:"var(--sky-500)"},
+      {value:vertrek, color:"var(--lavender-500)"}
+    ], "totaal")}
+    <div>
+      ${legendRow("var(--sky-500)", "Aankomst", aankomst)}
+      ${legendRow("var(--lavender-500)", "Vertrek", vertrek)}
+    </div>
+  </div>`;
+
+  html += `<div class="section-label">Taken vandaag: klaar versus nog te doen</div>`;
+  html += `<div class="card" style="margin-bottom:16px; display:flex; align-items:center; gap:16px;">
+    ${pieChart([
+      {value:doneTasks, color:"var(--leaf-400)"},
+      {value:openTasks, color:"var(--coral-500)"}
+    ], "taken")}
+    <div>
+      ${legendRow("var(--leaf-400)", "Klaar / Aankomstcheck", doneTasks)}
+      ${legendRow("var(--coral-500)", "Nog te doen", openTasks)}
+    </div>
+  </div>`;
+
+  html += `<div class="section-label">Accommodaties, per stadium</div>`;
   html += `<div class="card" style="margin-bottom:16px;">
     ${hBar([
       {value:accomCounts.vertrekcheck, color:"var(--sky-500)"},
@@ -2216,20 +2286,6 @@ function renderDashboardTab(main){
       <div class="chip2"><b>${accomCounts.vertrekcheck}</b><span>Vertrekcheck</span></div>
       <div class="chip2"><b>${accomCounts.todo}</b><span>Schoonmaak</span></div>
       <div class="chip2"><b>${accomCounts.gecheckt}</b><span>Aankomstcheck</span></div>
-    </div>
-  </div>`;
-
-  html += `<div class="section-label">Aankomst, vertrek en wissel vandaag</div>`;
-  html += `<div class="card" style="margin-bottom:16px;">
-    ${hBar([
-      {value:aankomst, color:"var(--sky-500)"},
-      {value:vertrek, color:"var(--lavender-500)"},
-      {value:wissel, color:"var(--amber-500)"}
-    ], aankomst+vertrek+wissel)}
-    <div class="ontbijt-summary" style="margin-top:12px;">
-      <div class="chip2"><b>${aankomst}</b><span>Aankomst</span></div>
-      <div class="chip2"><b>${vertrek}</b><span>Vertrek</span></div>
-      <div class="chip2"><b>${wissel}</b><span>Wissel</span></div>
     </div>
   </div>`;
 
@@ -2263,7 +2319,122 @@ function renderDashboardTab(main){
     `).join("");
   }
 
+  html += `<div class="section-label">Ontbijt morgen (${escapeHtml(formatSaunaDate(tomorrowKey))})</div>`;
+  if(tomorrowOrders.length === 0){
+    html += '<div class="empty">Nog geen ontbijtjes doorgegeven voor morgen.</div>';
+  } else {
+    html += `<div class="card" style="margin-bottom:16px;">
+      <div class="ontbijt-summary" style="margin-bottom:8px;">
+        <div class="chip2"><b>${tomorrowOrders.length}</b><span>Gasten</span></div>
+        <div class="chip2"><b>${tomorrowOrders.filter(o=>o.paid).length}/${tomorrowOrders.length}</b><span>Betaald</span></div>
+      </div>
+      <div class="ontbijt-order-items">${ONTBIJT_FIELDS.filter(f=>tomorrowTotals[f]>0).map(f=>`${ONTBIJT_LABELS[f]}: <b>${tomorrowTotals[f]}</b>`).join(" &middot; ") || "Nog geen items"}</div>
+    </div>`;
+  }
+
+  html += renderNotesSection();
+
   main.innerHTML = html;
+  attachNotesHandlers();
+}
+
+// --- Dashboard notities: eigen lijst, zichtbaar op het Dashboard en apart bereikbaar via Receptie ---
+function noteId(){ return "n" + Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
+function getDashboardNotes(){
+  return Array.isArray(state.dashboardNotes) ? state.dashboardNotes : [];
+}
+function saveDashboardNotes(list){
+  state.dashboardNotes = list;
+  saveList("dashboard-notes", list);
+}
+function addDashboardNote(text, author){
+  saveDashboardNotes(getDashboardNotes().concat([{ id: noteId(), text, author, createdAt: Date.now() }]));
+}
+function deleteDashboardNote(id){
+  saveDashboardNotes(getDashboardNotes().filter(n=>n.id !== id));
+}
+
+function renderNotesSection(){
+  const notes = getDashboardNotes().slice().sort((a,b)=>b.createdAt - a.createdAt);
+  const staffOptions = ['<option value="">Van…</option>'].concat(
+    state.staff.map(s=>`<option value="${escapeHtml(s)}" ${getMyName()===s?'selected':''}>${escapeHtml(s)}</option>`)
+  ).join("");
+
+  let html = `<div class="section-label">Notities</div>`;
+  html += `<div class="ontbijt-form">
+    <textarea id="newNoteText" placeholder="Notitie voor het team…" rows="3" style="width:100%; border:1px solid var(--line); border-radius:9px; padding:9px 10px; font-family:var(--font-body); font-size:13px; margin-bottom:8px; resize:vertical;"></textarea>
+    <select id="newNoteAuthor">${staffOptions}</select>
+    <button class="ontbijt-add-btn" id="addNoteBtn">Notitie toevoegen</button>
+  </div>`;
+
+  if(notes.length === 0){
+    html += '<div class="empty">Nog geen notities.</div>';
+  } else {
+    html += notes.map(n=>{
+      const isConfirming = !!state.confirmDelete['note-'+n.id];
+      return `
+      <div class="ontbijt-order">
+        <div class="ontbijt-order-head">
+          <span class="name">${escapeHtml(n.author || "Onbekend")}</span>
+          ${isConfirming ? `
+            <span style="display:flex; align-items:center; gap:6px;">
+              <span style="font-size:11px; color:var(--coral-500); font-weight:600;">Verwijderen?</span>
+              <button class="ontbijt-paid-btn" style="background:var(--coral-500); border-color:var(--coral-500); color:var(--white);" data-action="confirm-delete-note" data-id="${escapeAttr(n.id)}">Ja</button>
+              <button class="ontbijt-paid-btn" data-action="cancel-delete-note" data-id="${escapeAttr(n.id)}">Nee</button>
+            </span>
+          ` : `<button class="item-remove" data-action="ask-delete-note" data-id="${escapeAttr(n.id)}" title="Verwijderen">✕</button>`}
+        </div>
+        <div class="ontbijt-order-items" style="white-space:pre-wrap;">${escapeHtml(n.text)}</div>
+        <div class="ontbijt-order-meta"><span>${escapeHtml(formatChangedAt(n.createdAt))}</span></div>
+      </div>
+    `;
+    }).join("");
+  }
+  return html;
+}
+
+function attachNotesHandlers(){
+  const addBtn = document.getElementById('addNoteBtn');
+  if(addBtn){
+    addBtn.addEventListener('click', ()=>{
+      const text = document.getElementById('newNoteText').value.trim();
+      const author = document.getElementById('newNoteAuthor').value;
+      if(!text){
+        showToast("Vul een notitie in");
+        return;
+      }
+      addDashboardNote(text, author || getMyName());
+      showToast("Notitie toegevoegd");
+      renderMain();
+    });
+  }
+  document.querySelectorAll('[data-action="ask-delete-note"]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      state.confirmDelete['note-'+btn.dataset.id] = true;
+      renderMain();
+    });
+  });
+  document.querySelectorAll('[data-action="cancel-delete-note"]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      state.confirmDelete['note-'+btn.dataset.id] = false;
+      renderMain();
+    });
+  });
+  document.querySelectorAll('[data-action="confirm-delete-note"]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      state.confirmDelete['note-'+btn.dataset.id] = false;
+      deleteDashboardNote(btn.dataset.id);
+      showToast("Notitie verwijderd");
+      renderMain();
+    });
+  });
+}
+
+function renderNotitiesTab(main){
+  let html = `<div class="sync-intro" style="margin-bottom:14px;">Notities voor het team, ook zichtbaar op het Dashboard.</div>`;
+  html += renderNotesSection();
+  main.innerHTML = html;
+  attachNotesHandlers();
 }
 
 function renderPrognoseTab(main){
