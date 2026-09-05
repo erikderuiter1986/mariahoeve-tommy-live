@@ -1033,7 +1033,7 @@ const STATUSES = [
   {key:"vertrekcheck", label:"Vertrekcheck"},
   {key:"todo", label:"Schoonmaak"},
   {key:"klaar", label:"Klaar"},
-  {key:"gecheckt", label:"Gecheckt"}
+  {key:"gecheckt", label:"Aankomstcheck"}
 ];
 const ACCOM_ONLY_STATUS_KEYS = ["vertrekcheck"];
 
@@ -1320,7 +1320,7 @@ function renderSummary(){
   strip.innerHTML = `
     <div class="chip"><b>${counts.todo}</b><span>Te doen</span></div>
     <div class="chip"><b>${counts.klaar}</b><span>Klaar</span></div>
-    <div class="chip"><b>${counts.gecheckt}</b><span>Gecheckt</span></div>
+    <div class="chip"><b>${counts.gecheckt}</b><span>Aankomstcheck</span></div>
   `;
 }
 
@@ -1494,7 +1494,24 @@ function renderItemCard(kind, name, simple){
   const showNote = !!state.openNotes[id] || (e.note && e.note.length>0);
 
   if(simple){
-    const isDone = e.status === "klaar" || e.status === "gecheckt";
+    if(kind === "accom"){
+      const statusBtns = STATUSES.map(s=>`
+        <button class="status-btn ${e.status===s.key?'active-'+s.key:''}" data-id="${escapeAttr(id)}" data-status="${s.key}">${s.label}</button>
+      `).join("");
+      return `
+        <div class="card">
+          <div class="card-head">
+            <div class="card-title">
+              <span class="status-dot ${statusDotClass(e.status)}"></span>
+              <span class="name">${escapeHtml(name)}</span>
+            </div>
+          </div>
+          <div class="status-row">${statusBtns}</div>
+          ${renderNoteSection(id, e, showNote)}
+        </div>
+      `;
+    }
+    const isDone = e.status === "klaar";
     return `
       <div class="card">
         <div class="card-head">
@@ -1621,7 +1638,7 @@ function renderMyTasksTab(main){
 
 function renderDagoverzichtTab(main){
   const codeLabel = { W:"Wissel", V:"Vertrek", LU:"Vertrek", A:"Aankomst", VI:"Aankomst" };
-  const statusLabelMap = { vertrekcheck:"Vertrekcheck", todo:"Schoonmaak", klaar:"Klaar", gecheckt:"Gecheckt" };
+  const statusLabelMap = { vertrekcheck:"Vertrekcheck", todo:"Schoonmaak", klaar:"Klaar", gecheckt:"Aankomstcheck" };
   const sortPriority = { W:0, V:1, LU:1, A:2, VI:2 };
 
   const accomItems = state.accommodations
@@ -2134,7 +2151,7 @@ function renderPrognoseTab(main){
   const dayNames = ["zo","ma","di","wo","do","vr","za"];
   const months = ["jan","feb","mrt","apr","mei","jun","jul","aug","sep","okt","nov","dec"];
   const codeLabel = { W:"Wissel", V:"Vertrek", LU:"Vertrek", A:"Aankomst", VI:"Aankomst" };
-  const statusLabelMap = { vertrekcheck:"Vertrekcheck", todo:"Schoonmaak", klaar:"Klaar", gecheckt:"Gecheckt" };
+  const statusLabelMap = { vertrekcheck:"Vertrekcheck", todo:"Schoonmaak", klaar:"Klaar", gecheckt:"Aankomstcheck" };
   let html = '';
   html += `<div class="sync-intro" style="margin-bottom:14px;">Vooruitblik voor de komende eenentwintig dagen: hoeveel accommodaties aankomst, vertrek of wissel hebben. Klik op een dag voor de details. Let op, dit is een momentopname, ververs regelmatig om last minute boekingen mee te pakken.</div>`;
   for(let i=0;i<21;i++){
