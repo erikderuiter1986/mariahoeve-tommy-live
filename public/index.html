@@ -974,6 +974,7 @@
       </div>
       <div class="nav-group-title">Housekeeping</div>
       <div class="nav-link-list">
+        <button class="tab-btn nav-link-btn" data-tab="dashboard">Dashboard</button>
         <button class="tab-btn nav-link-btn" data-tab="accom">Accommodaties</button>
         <button class="tab-btn nav-link-btn" data-tab="sanitair">Sanitair</button>
         <button class="tab-btn nav-link-btn" data-tab="fixed">Overige taken</button>
@@ -1351,6 +1352,9 @@ function renderMain(){
     return;
   } else if(state.currentTab === "prognose"){
     renderPrognoseTab(main);
+    return;
+  } else if(state.currentTab === "dashboard"){
+    renderDashboardTab(main);
     return;
   } else if(state.currentTab === "sauna"){
     renderSaunaTab(main);
@@ -2152,6 +2156,114 @@ function attachSaunaHandlers(){
       renderMain();
     });
   });
+}
+
+function renderDashboardTab(main){
+  const dKey = dateKey(state.currentDate);
+
+  const accomRelevant = state.accommodations
+    .map(name=>({ name, e:getEntry("accom:"+name) }))
+    .filter(it=>it.e.arrival && it.e.assignee);
+  const accomCounts = { vertrekcheck:0, todo:0, gecheckt:0 };
+  accomRelevant.forEach(it=>{
+    const key = it.e.status || "todo";
+    if(accomCounts[key] !== undefined) accomCounts[key]++;
+  });
+
+  const sanitairRelevant = state.sanitairTasks.map(name=>getEntry("sanitair:"+name)).filter(e=>e.assignee);
+  const fixedRelevant = state.fixedTasks.map(name=>getEntry("fixed:"+name)).filter(e=>e.assignee);
+  const overigeRelevant = sanitairRelevant.concat(fixedRelevant);
+  const overigeKlaar = overigeRelevant.filter(e=>e.status === "klaar").length;
+  const overigeNietKlaar = overigeRelevant.length - overigeKlaar;
+
+  let aankomst=0, vertrek=0, wissel=0;
+  accomRelevant.forEach(it=>{
+    if(it.e.arrival === "W") wissel++;
+    else if(it.e.arrival === "V") vertrek++;
+    else if(it.e.arrival === "A") aankomst++;
+  });
+
+  const workload = state.staff.map(s=>{
+    const items = accomRelevant.filter(it=>it.e.assignee===s)
+      .concat(sanitairRelevant.filter(e=>e.assignee===s).map(e=>({e})))
+      .concat(fixedRelevant.filter(e=>e.assignee===s).map(e=>({e})));
+    const done = items.filter(it=>it.e.status==="klaar" || it.e.status==="gecheckt").length;
+    return { name:s, total: items.length, done };
+  }).filter(w=>w.total>0);
+
+  function hBar(segments, maxVal){
+    const W = 300, H = 24, gap = 2;
+    let x = 0;
+    const bars = segments.map(seg=>{
+      const w = maxVal > 0 ? (seg.value / maxVal) * W : 0;
+      const rect = `<rect x="${x}" y="0" width="${w.toFixed(1)}" height="${H}" fill="${seg.color}" />`;
+      x += w;
+      return rect;
+    }).join("");
+    return `<svg viewBox="0 0 ${W} ${H}" width="100%" height="${H}" style="display:block;">${bars || `<rect x="0" y="0" width="${W}" height="${H}" fill="var(--line)" />`}</svg>`;
+  }
+
+  let html = `<div class="sync-intro" style="margin-bottom:14px;">Overzicht van wat er gedaan is en nog moet gebeuren voor ${escapeHtml(dayLabelText(state.currentDate))}.</div>`;
+
+  html += `<div class="section-label" style="margin-top:0;">Accommodaties, per stadium</div>`;
+  html += `<div class="card" style="margin-bottom:16px;">
+    ${hBar([
+      {value:accomCounts.vertrekcheck, color:"var(--sky-500)"},
+      {value:accomCounts.todo, color:"var(--coral-500)"},
+      {value:accomCounts.gecheckt, color:"var(--leaf-600)"}
+    ], accomRelevant.length)}
+    <div class="ontbijt-summary" style="margin-top:12px;">
+      <div class="chip2"><b>${accomCounts.vertrekcheck}</b><span>Vertrekcheck</span></div>
+      <div class="chip2"><b>${accomCounts.todo}</b><span>Schoonmaak</span></div>
+      <div class="chip2"><b>${accomCounts.gecheckt}</b><span>Aankomstcheck</span></div>
+    </div>
+  </div>`;
+
+  html += `<div class="section-label">Aankomst, vertrek en wissel vandaag</div>`;
+  html += `<div class="card" style="margin-bottom:16px;">
+    ${hBar([
+      {value:aankomst, color:"var(--sky-500)"},
+      {value:vertrek, color:"var(--lavender-500)"},
+      {value:wissel, color:"var(--amber-500)"}
+    ], aankomst+vertrek+wissel)}
+    <div class="ontbijt-summary" style="margin-top:12px;">
+      <div class="chip2"><b>${aankomst}</b><span>Aankomst</span></div>
+      <div class="chip2"><b>${vertrek}</b><span>Vertrek</span></div>
+      <div class="chip2"><b>${wissel}</b><span>Wissel</span></div>
+    </div>
+  </div>`;
+
+  html += `<div class="section-label">Sanitair &amp; overige taken</div>`;
+  html += `<div class="card" style="margin-bottom:16px;">
+    ${hBar([
+      {value:overigeNietKlaar, color:"var(--coral-500)"},
+      {value:overigeKlaar, color:"var(--leaf-400)"}
+    ], overigeRelevant.length)}
+    <div class="ontbijt-summary" style="margin-top:12px;">
+      <div class="chip2"><b>${overigeNietKlaar}</b><span>Nog niet klaar</span></div>
+      <div class="chip2"><b>${overigeKlaar}</b><span>Klaar</span></div>
+    </div>
+  </div>`;
+
+  html += `<div class="section-label">Werkverdeling per teamlid vandaag</div>`;
+  if(workload.length === 0){
+    html += '<div class="empty">Nog niets toegewezen voor deze dag.</div>';
+  } else {
+    html += workload.map(w=>`
+      <div class="card" style="margin-bottom:10px;">
+        <div class="card-head" style="margin-bottom:8px;">
+          <span class="name">${escapeHtml(w.name)}</span>
+          <span class="prognose-detail-meta">${w.done}/${w.total} klaar</span>
+        </div>
+        ${hBar([
+          {value:w.done, color:"var(--leaf-400)"},
+          {value:w.total-w.done, color:"var(--line)"}
+        ], w.total)}
+      </div>
+    `).join("");
+  }
+
+  main.innerHTML = html;
 }
 
 function renderPrognoseTab(main){
