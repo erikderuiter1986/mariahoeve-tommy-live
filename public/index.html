@@ -1035,11 +1035,13 @@ const LINEN_OPTIONS = [
   {code:"nee", label:"Nee"}
 ];
 const STATUSES = [
+  {key:"vertrekcheck", label:"Vertrekcheck"},
   {key:"todo", label:"Schoonmaak"},
   {key:"klaar", label:"Klaar"},
   {key:"gecheckt", label:"Aankomstcheck"}
 ];
-const ACCOM_ONLY_STATUS_KEYS = [];
+const ACCOM_ONLY_STATUS_KEYS = ["vertrekcheck"];
+const ACCOM_EXCLUDED_STATUS_KEYS = ["klaar"];
 
 const ONTBIJT_LABELS = {
   regular: "Regular", vega: "Vegetarisch", vegan: "Vegan", kids: "Kids", vegaKids: "Vega kids",
@@ -1499,7 +1501,7 @@ function renderItemCard(kind, name, simple){
 
   if(simple){
     if(kind === "accom"){
-      const statusBtns = STATUSES.map(s=>`
+      const statusBtns = STATUSES.filter(s=>!ACCOM_EXCLUDED_STATUS_KEYS.includes(s.key)).map(s=>`
         <button class="status-btn ${e.status===s.key?'active-'+s.key:''}" data-id="${escapeAttr(id)}" data-status="${s.key}">${s.label}</button>
       `).join("");
       return `
@@ -1552,7 +1554,7 @@ function renderItemCard(kind, name, simple){
       </div>
     </div>` : "";
   const FIXED_ALLOWED_STATUS_KEYS = ["klaar"];
-  const statusBtns = STATUSES.filter(s=> kind==="accom" ? true : FIXED_ALLOWED_STATUS_KEYS.includes(s.key)).map(s=>`
+  const statusBtns = STATUSES.filter(s=> kind==="accom" ? !ACCOM_EXCLUDED_STATUS_KEYS.includes(s.key) : FIXED_ALLOWED_STATUS_KEYS.includes(s.key)).map(s=>`
     <button class="status-btn ${e.status===s.key?'active-'+s.key:''}" data-id="${escapeAttr(id)}" data-status="${s.key}">${s.label}</button>
   `).join("");
   const changedLine = e.changedBy ? `<div class="changed-line">Laatst gewijzigd door ${escapeHtml(e.changedBy)}${e.changedAt ? ', ' + formatChangedAt(e.changedAt) : ''}</div>` : "";
