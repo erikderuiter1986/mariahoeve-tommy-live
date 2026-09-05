@@ -144,9 +144,14 @@
   .chip b{display:block; font-size:18px; font-family:var(--font-display);}
   .chip span{font-size:10px; text-transform:uppercase; letter-spacing:0.6px; color:var(--moss-400);}
   nav.tabs{
-    display:flex;
-    background:var(--forest-700);
-    padding:0 12px;
+    display:none;
+  }
+  @media (max-width:600px){
+    nav.tabs{
+      display:flex;
+      background:var(--forest-700);
+      padding:0 12px;
+    }
   }
   nav.tabs button{
     flex:1;
@@ -1030,12 +1035,11 @@ const LINEN_OPTIONS = [
   {code:"nee", label:"Nee"}
 ];
 const STATUSES = [
-  {key:"vertrekcheck", label:"Vertrekcheck"},
   {key:"todo", label:"Schoonmaak"},
   {key:"klaar", label:"Klaar"},
   {key:"gecheckt", label:"Aankomstcheck"}
 ];
-const ACCOM_ONLY_STATUS_KEYS = ["vertrekcheck"];
+const ACCOM_ONLY_STATUS_KEYS = [];
 
 const ONTBIJT_LABELS = {
   regular: "Regular", vega: "Vegetarisch", vegan: "Vegan", kids: "Kids", vegaKids: "Vega kids",
