@@ -1222,7 +1222,7 @@ async function init(){
     renderConnectionSetup();
     return;
   }
-  state.currentTab = window.matchMedia("(min-width:821px)").matches ? "accom" : "mytasks";
+  state.currentTab = "dashboard";
   document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
   const activeBtn = document.querySelector(`.tab-btn[data-tab="${state.currentTab}"]`);
   if(activeBtn) activeBtn.classList.add('active');
